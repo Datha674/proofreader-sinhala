@@ -98,6 +98,14 @@ def save_config():
     st.cfg.save()
     st.reload_model()
     flash("Settings saved / සැකසීම් සුරැකිණි", "ok")
+    # Immediately verify the chosen model actually works for generateContent,
+    # so the admin doesn't have to separately click "Test Key".
+    if st.client is not None:
+        ok, msg = st.client.test()
+        if ok:
+            flash("Model '%s' works ✓" % st.cfg.get("model"), "ok")
+        else:
+            flash("Model '%s' FAILED: %s" % (st.cfg.get("model"), msg[:200]), "error")
     return redirect(url_for("admin.dashboard"))
 
 
@@ -127,7 +135,7 @@ def test_api_key():
             st.proofread("ලංකාවේ අද්‍යාපන ප්‍රශ්ණ ගොඩක් තිබේ.")
             flash("API key works ✓ (test proofread succeeded)", "ok")
         except Exception as e:
-            flash("API key test failed: %s" % str(e)[:160], "error")
+            flash("API key test failed: %s" % str(e)[:240], "error")
     return redirect(url_for("admin.dashboard"))
 
 

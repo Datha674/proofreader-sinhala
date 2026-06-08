@@ -143,8 +143,11 @@ def _http_error(r):
         detail = (r.text or "")[:200]
     code = r.status_code
     if code == 404:
-        msg = ("Model not found for this API key — pick another model from the "
-               "dropdown (click 'Refresh models')")
+        # Google's own message is the most useful thing here — it usually says
+        # e.g. "is not found for API version v1beta, or is not supported for
+        # generateContent". Surface it verbatim.
+        msg = "Model not found (HTTP 404): %s" % (detail[:200] or
+              "pick another model from the dropdown and Save Settings")
     elif code in (401, 403):
         msg = "API key invalid or lacks access (HTTP %d): %s" % (code, detail[:120])
     elif code == 429:
