@@ -20,14 +20,13 @@ from datetime import datetime
 
 from flask import Flask, request, jsonify
 
-import google.generativeai as genai
-
 from config_proxy import (
     ProxyConfig, BASE_DIR, DATA_DIR, CORRECTIONS_PATH, LOG_PATH,
 )
 from corrections_db import CorrectionsDB
 from usage_logger import UsageLogger
 from admin_panel import admin_bp
+from gemini_rest import GeminiRest, GeminiRestError
 
 CONFIDENCE_THRESHOLD = 0.75
 MAX_ERRORS = 10
@@ -42,27 +41,43 @@ class ProxyState:
         self.db = CorrectionsDB(CORRECTIONS_PATH)
         self.logger = UsageLogger(LOG_PATH)
         self.prompt = self.cfg.get_prompt()
-        self.model = None
+        self.client = None
         self.model_error = ""
+        self.available_models = []   # populated lazily / on refresh_models()
+        self._models_tried = False   # avoid re-hitting the API on every page load
         self.sem = threading.Semaphore(int(self.cfg.get("max_concurrent", 4)))
         self.reload_model()
 
     def reload_model(self):
-        """(Re)configure the Gemini client from the current key + model."""
+        """(Re)build the Gemini REST client from the current key + model."""
         key = self.cfg.get_api_key()
         self.prompt = self.cfg.get_prompt()
         self.sem = threading.Semaphore(int(self.cfg.get("max_concurrent", 4)))
+        self._models_tried = False   # key/model may have changed — allow one retry
         if not key:
-            self.model = None
+            self.client = None
             self.model_error = "No API key set (edit api_key.txt or use the admin panel)"
             return
+        # Building the client never hits the network, so it can't fail here;
+        # validity is proven by Test Key / the first real request.
+        self.client = GeminiRest(
+            key,
+            self.cfg.get("model", "gemini-2.0-flash"),
+            timeout=int(self.cfg.get("request_timeout", 60)),
+        )
+        self.model_error = ""
+
+    def refresh_models(self):
+        """Fetch the models this key can use. Returns "" on success, else an error."""
+        self._models_tried = True
+        if self.client is None:
+            self.available_models = []
+            return self.model_error or "No API key set"
         try:
-            genai.configure(api_key=key, transport=self.cfg.get("api_transport", "rest"))
-            self.model = genai.GenerativeModel(self.cfg.get("model", "gemini-2.0-flash"))
-            self.model_error = ""
-        except Exception as e:
-            self.model = None
-            self.model_error = str(e)
+            self.available_models = self.client.list_models()
+            return ""
+        except GeminiRestError as e:
+            return e.message
 
     # ----- core proofreading --------------------------------------------
     def proofread(self, text):
@@ -71,7 +86,7 @@ class ProxyState:
             return {"errors": [], "corrected_text": "", "summary_si": "",
                     "summary_en": "", "pre_fixed_count": 0,
                     "stats": _stats(text, [])}
-        if self.model is None:
+        if self.client is None:
             raise RuntimeError(self.model_error or "Gemini model not ready")
 
         # LAYER 1 — pre-check from the human corrections DB.
@@ -95,13 +110,10 @@ class ProxyState:
                             "They are ALL valid. NEVER flag them: " + ", ".join(english))
         prompt = self.prompt + inject_block + english_note + "\n\nSinhala text to proofread:\n" + text
 
-        # LAYER 3 — Gemini.
-        gen_config = genai.types.GenerationConfig(
-            temperature=0.05, response_mime_type="application/json"
-        )
+        # LAYER 3 — Gemini (plain HTTPS REST).
         with self.sem:
-            resp = self.model.generate_content(prompt, generation_config=gen_config)
-        data = _parse_json(getattr(resp, "text", "") or "", text)
+            raw = self.client.generate_content(prompt, temperature=0.05, json_mode=True)
+        data = _parse_json(raw or "", text)
 
         raw_errors = data.get("errors")
         if raw_errors is None:
@@ -193,7 +205,7 @@ def status():
         "status": "online",
         "model": STATE.cfg.get("model"),
         "corrections_total": STATE.db.get_stats()["total"],
-        "model_ready": STATE.model is not None,
+        "model_ready": STATE.client is not None,
         "version": 2,
     })
 

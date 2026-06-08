@@ -31,9 +31,11 @@ class LanProxyProofreader:
                         % (model, corr))
             return (False, "Proxy error: HTTP %d" % r.status_code)
         except req_lib.exceptions.ConnectionError:
-            return (False, "Control PC සම්බන්ධ නොවේ — IP ලිපිනය නිවැරදිද?")
+            return (False, "Control PC සම්බන්ධ නොවේ — IP/Port හෝ Firewall පරීක්ෂා කරන්න "
+                           "(Cannot reach Control PC — check the LAN IP, port 8765, "
+                           "and run FIREWALL_SETUP.bat as admin on the Control PC)")
         except req_lib.exceptions.Timeout:
-            return (False, "Connection timed out — Control PC online ද?")
+            return (False, "Connection timed out — Control PC online ද? (firewall blocking 8765?)")
         except Exception as e:
             return (False, str(e)[:100])
 

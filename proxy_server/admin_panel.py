@@ -55,15 +55,32 @@ def logout():
 @login_required
 def dashboard():
     st = _state()
+    # First view after a key is set: populate the model dropdown (best-effort,
+    # once per key change — never re-hits the API on every reload).
+    if st.client is not None and not st.available_models and not st._models_tried:
+        st.refresh_models()
     return render_template(
         "dashboard.html",
         stats=st.db.get_stats(),
         cfg=st.cfg.data,
         usage=st.logger.summary(),
-        model_ready=st.model is not None,
+        model_ready=st.client is not None,
         model_error=st.model_error,
         has_key=bool(st.cfg.get_api_key()),
+        available_models=st.available_models,
     )
+
+
+@admin_bp.route("/refresh_models")
+@login_required
+def refresh_models():
+    st = _state()
+    err = st.refresh_models()
+    if err:
+        flash("Could not load models: %s" % err[:160], "error")
+    else:
+        flash("Loaded %d available models" % len(st.available_models), "ok")
+    return redirect(url_for("admin.dashboard"))
 
 
 @admin_bp.route("/save_config", methods=["POST"])
@@ -92,7 +109,9 @@ def save_api_key():
     if key:
         st.cfg.set_api_key(key)
         st.reload_model()
-        flash("API key saved", "ok")
+        # Refresh the model dropdown so the admin can pick a valid model.
+        err = st.refresh_models()
+        flash("API key saved" + ("" if not err else " (model list: %s)" % err[:120]), "ok")
     return redirect(url_for("admin.dashboard"))
 
 
@@ -101,14 +120,14 @@ def save_api_key():
 def test_api_key():
     st = _state()
     st.reload_model()
-    if st.model is None:
+    if st.client is None:
         flash("API key NOT working: %s" % (st.model_error or "no key"), "error")
     else:
         try:
             st.proofread("ලංකාවේ අද්‍යාපන ප්‍රශ්ණ ගොඩක් තිබේ.")
             flash("API key works ✓ (test proofread succeeded)", "ok")
         except Exception as e:
-            flash("API key test failed: %s" % str(e)[:120], "error")
+            flash("API key test failed: %s" % str(e)[:160], "error")
     return redirect(url_for("admin.dashboard"))
 
 

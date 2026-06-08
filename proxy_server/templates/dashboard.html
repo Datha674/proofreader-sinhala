@@ -32,7 +32,18 @@
   <form method="post" action="{{ url_for('admin.save_config') }}">
     <div class="grid">
       <label>Model
-        <input name="model" value="{{ cfg.model }}" style="width:100%"></label>
+        <select name="model" style="width:100%">
+          {% if cfg.model and cfg.model not in available_models %}
+            <option value="{{ cfg.model }}" selected>{{ cfg.model }} (current)</option>
+          {% endif %}
+          {% for m in available_models %}
+            <option value="{{ m }}" {% if m == cfg.model %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+        <span class="muted">
+          {% if available_models %}{{ available_models|length }} models available · {% endif %}
+          <a class="tab" href="{{ url_for('admin.refresh_models') }}">🔄 Refresh models</a>
+        </span></label>
       <label>Precheck threshold
         <input name="precheck_threshold" type="number" value="{{ cfg.precheck_threshold }}" style="width:100%"></label>
       <label>Inject top N
