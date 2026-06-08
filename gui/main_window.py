@@ -291,7 +291,7 @@ class MainWindow(ctk.CTk):
             self.model_label.configure(text="🌐 LAN Proxy → %s" % self.config_obj.get("proxy_url", ""))
             self.conn_status.set_status(True, self._t("lan_mode"))
         else:
-            self.model_label.configure(text="(%s)" % self.config_obj.get("gemini_model", "gemini-2.0-flash"))
+            self.model_label.configure(text="(%s)" % self.config_obj.get("gemini_model", "gemini-2.5-flash"))
             if self.config_obj.has_api_key():
                 self.conn_status.set_status(True, self._t("key_ready"))
             else:

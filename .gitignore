@@ -1,0 +1,25 @@
+# ---- Secrets (NEVER commit real keys) ----
+proxy_server/api_key.txt
+gemini_key.txt
+**/config.json
+
+# ---- Runtime / per-machine state ----
+proxy_server/proxy_config.json
+proxy_server/data/
+*.log
+
+# ---- Python cache ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ---- PyInstaller build output ----
+build/
+dist/
+*.spec.bak
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

@@ -62,7 +62,7 @@ class ProxyState:
         # validity is proven by Test Key / the first real request.
         self.client = GeminiRest(
             key,
-            self.cfg.get("model", "gemini-2.0-flash"),
+            self.cfg.get("model", "gemini-2.5-flash"),
             timeout=int(self.cfg.get("request_timeout", 60)),
         )
         self.model_error = ""
@@ -78,6 +78,21 @@ class ProxyState:
             return ""
         except GeminiRestError as e:
             return e.message
+
+    def ensure_valid_model(self):
+        """If the configured model isn't in the available list, switch to the best
+        available one (and persist it). Returns the new model name if changed."""
+        if not self.available_models:
+            return None
+        if self.cfg.get("model", "") in self.available_models:
+            return None
+        pick = _pick_best_model(self.available_models)
+        if not pick:
+            return None
+        self.cfg.set("model", pick)
+        self.cfg.save()
+        self.reload_model()
+        return pick
 
     # ----- core proofreading --------------------------------------------
     def proofread(self, text):
@@ -153,6 +168,26 @@ class ProxyState:
 
 
 # ----- helpers -----------------------------------------------------------
+def _pick_best_model(models):
+    """Choose a good default from a key's available models: a current 'flash'
+    family model (great Sinhala + generous free-tier quota), avoiding lite/
+    experimental/retired variants. Falls back to any flash, then the first model."""
+    prefs = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash-001",
+             "gemini-2.0-flash"]
+    for p in prefs:
+        if p in models:
+            return p
+    skip = ("lite", "exp", "thinking", "8b", "preview")
+    for m in models:
+        low = m.lower()
+        if "flash" in low and not any(s in low for s in skip):
+            return m
+    for m in models:
+        if "flash" in m.lower():
+            return m
+    return models[0] if models else None
+
+
 def _clamp(v):
     try:
         return max(0.0, min(1.0, float(v)))

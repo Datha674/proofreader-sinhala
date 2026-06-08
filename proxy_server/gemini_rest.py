@@ -40,9 +40,9 @@ class GeminiRestError(Exception):
 
 
 class GeminiRest:
-    def __init__(self, api_key, model="gemini-2.0-flash", timeout=DEFAULT_TIMEOUT):
+    def __init__(self, api_key, model="gemini-2.5-flash", timeout=DEFAULT_TIMEOUT):
         self.api_key = (api_key or "").strip()
-        self.model = _short_name(model) or "gemini-2.0-flash"
+        self.model = _short_name(model) or "gemini-2.5-flash"
         self.timeout = timeout
 
     # ----- models --------------------------------------------------------

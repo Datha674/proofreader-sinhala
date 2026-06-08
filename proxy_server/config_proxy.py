@@ -20,7 +20,7 @@ LOG_PATH = os.path.join(DATA_DIR, "usage_log.csv")
 DEFAULT_CONFIG = {
     "host": "0.0.0.0",            # listen on all interfaces (LAN reachable)
     "port": 8765,
-    "model": "gemini-2.0-flash",
+    "model": "gemini-2.5-flash",
     "api_transport": "rest",
     "admin_password": "admin123",   # CHANGE THIS in the admin panel
     "precheck_threshold": 5,        # promote to precheck after N confirmed hits

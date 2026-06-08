@@ -121,12 +121,12 @@ class SettingsDialog(ctk.CTkToplevel):
             anchor="w", padx=4, pady=(10, 0)
         )
         self.model_var = ctk.StringVar(
-            value=self.config_obj.get("gemini_model", "gemini-2.0-flash")
+            value=self.config_obj.get("gemini_model", "gemini-2.5-flash")
         )
         for value, label in [
-            ("gemini-2.0-flash", "gemini-2.0-flash  (Fast, Free — Recommended)"),
-            ("gemini-2.5-flash", "gemini-2.5-flash  (Newer)"),
-            ("gemini-1.5-flash", "gemini-1.5-flash  (Legacy)"),
+            ("gemini-2.5-flash", "gemini-2.5-flash  (Fast, Free — Recommended)"),
+            ("gemini-flash-latest", "gemini-flash-latest  (Always newest flash)"),
+            ("gemini-2.5-pro", "gemini-2.5-pro  (Best quality, low free quota)"),
         ]:
             ctk.CTkRadioButton(
                 self.direct_frame, text=label, variable=self.model_var, value=value,

@@ -22,7 +22,7 @@ KEY_FILE_NAME = "gemini_key.txt"
 
 DEFAULT_CONFIG = {
     "gemini_api_key": "",
-    "gemini_model": "gemini-2.0-flash",
+    "gemini_model": "gemini-2.5-flash",
     "api_transport": "rest",      # "rest" (firewall-friendly) or "grpc"
     "connection_mode": "direct",  # "direct" (Gemini on this PC) | "lan_proxy"
     "proxy_url": "http://192.168.1.100:8765",

@@ -59,6 +59,9 @@ def dashboard():
     # once per key change — never re-hits the API on every reload).
     if st.client is not None and not st.available_models and not st._models_tried:
         st.refresh_models()
+        changed = st.ensure_valid_model()
+        if changed:
+            flash("Configured model was unavailable — switched to '%s'" % changed, "ok")
     return render_template(
         "dashboard.html",
         stats=st.db.get_stats(),
@@ -80,6 +83,9 @@ def refresh_models():
         flash("Could not load models: %s" % err[:160], "error")
     else:
         flash("Loaded %d available models" % len(st.available_models), "ok")
+        changed = st.ensure_valid_model()
+        if changed:
+            flash("Configured model was unavailable — switched to '%s'" % changed, "ok")
     return redirect(url_for("admin.dashboard"))
 
 
@@ -120,6 +126,10 @@ def save_api_key():
         # Refresh the model dropdown so the admin can pick a valid model.
         err = st.refresh_models()
         flash("API key saved" + ("" if not err else " (model list: %s)" % err[:120]), "ok")
+        # Auto-heal: if the (default/old) model is retired, pick a working one.
+        changed = st.ensure_valid_model()
+        if changed:
+            flash("Model auto-set to '%s' (the previous one was unavailable)" % changed, "ok")
     return redirect(url_for("admin.dashboard"))
 
 

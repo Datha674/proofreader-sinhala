@@ -265,7 +265,7 @@ class GeminiError(Exception):
 
 
 class GeminiProofreader:
-    def __init__(self, api_key, model="gemini-2.0-flash", transport="rest"):
+    def __init__(self, api_key, model="gemini-2.5-flash", transport="rest"):
         if not _HAVE_GENAI:
             raise GeminiError(
                 "google-generativeai පුස්තකාලය ස්ථාපනය කර නැත",

@@ -52,7 +52,7 @@ class SinhalaProofreader:
             self.mode = "lan_proxy"
         else:  # direct
             key = self.config.resolve_api_key()
-            model = self.config.get("gemini_model", "gemini-2.0-flash")
+            model = self.config.get("gemini_model", "gemini-2.5-flash")
             transport = self.config.get_transport()
             sig = ("direct", key, model, transport)
             if self._engine_sig != sig:
