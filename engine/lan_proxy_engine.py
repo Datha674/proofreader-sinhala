@@ -1,0 +1,142 @@
+# -*- coding: utf-8 -*-
+"""
+LanProxyProofreader — client-side engine for LAN deployment.
+
+Sends text to the Control PC proxy instead of calling Gemini directly, so the
+client machine needs NO API key and NO internet (only LAN access to the proxy).
+Returns a dict in the same shape the GUI expects (ok / mode / original / errors
+with start-end / corrected_text / summary / stats).
+"""
+
+import unicodedata
+
+import requests as req_lib
+
+from .gemini_engine import GeminiError
+
+
+class LanProxyProofreader:
+    def __init__(self, proxy_url):
+        self.proxy_url = (proxy_url or "").rstrip("/")
+
+    # ----- diagnostics ---------------------------------------------------
+    def test_connection(self):
+        try:
+            r = req_lib.get(self.proxy_url + "/status", timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                model = data.get("model", "")
+                corr = data.get("corrections_total", 0)
+                return (True, "සාර්ථකයි! Proxy online | %s | Corrections: %s"
+                        % (model, corr))
+            return (False, "Proxy error: HTTP %d" % r.status_code)
+        except req_lib.exceptions.ConnectionError:
+            return (False, "Control PC සම්බන්ධ නොවේ — IP ලිපිනය නිවැරදිද?")
+        except req_lib.exceptions.Timeout:
+            return (False, "Connection timed out — Control PC online ද?")
+        except Exception as e:
+            return (False, str(e)[:100])
+
+    # ----- proofreading --------------------------------------------------
+    def proofread(self, text, corrections_db=None, on_progress=None):
+        text = unicodedata.normalize("NFC", (text or "").strip())
+        if not text:
+            return self._empty(text)
+        if on_progress:
+            on_progress("Control PC සමඟ පරීක්ෂා කරමින්...")
+
+        # corrections_db is handled server-side in LAN mode; the client just
+        # sends raw text to the proxy.
+        try:
+            r = req_lib.post(
+                self.proxy_url + "/proofread",
+                json={"text": text},
+                timeout=60,
+                headers={"Content-Type": "application/json"},
+            )
+        except req_lib.exceptions.ConnectionError:
+            raise GeminiError(
+                "Control PC proxy සම්බන්ධ නොවේ. Settings → Proxy URL නිවැරදිද?",
+                "Cannot reach the Control PC proxy — check Settings → Proxy URL",
+                kind="network",
+            )
+        except req_lib.exceptions.Timeout:
+            raise GeminiError(
+                "ප්‍රතිචාරය ප්‍රමාද විය (60s). Control PC online ද? Text කෙටි කරන්න.",
+                "Proxy timed out (60s) — is the Control PC online? Try shorter text.",
+                kind="timeout",
+            )
+        except Exception as e:
+            raise GeminiError("Proxy දෝෂයකි", "Proxy error: %s" % e, kind="error")
+
+        if r.status_code != 200:
+            raise GeminiError(
+                "Proxy දෝෂයකි (HTTP %d)" % r.status_code,
+                "Proxy returned HTTP %d" % r.status_code,
+                kind="error",
+            )
+
+        result = r.json()
+
+        # Normalize schema: accept "errors" or "corrections".
+        errors = result.get("errors")
+        if errors is None:
+            errors = result.get("corrections")
+        errors = errors or []
+        errors = [e for e in errors if float(e.get("confidence", 1)) >= 0.75]
+        errors.sort(key=lambda x: x.get("confidence", 1), reverse=True)
+        errors = errors[:10]
+
+        corrected = result.get("corrected_text", text)
+        for e in errors:
+            orig = e.get("original", "")
+            pos = corrected.find(orig) if orig else -1
+            e["start"] = pos if pos >= 0 else None
+            e["end"] = (pos + len(orig)) if pos >= 0 else None
+            e.setdefault("type", "spelling")
+
+        stats = result.get("stats") or {}
+        stats.setdefault("total_words", len(text.split()))
+        stats.setdefault("errors_found", len(errors))
+        stats.setdefault("spell_errors", sum(1 for e in errors if e.get("type") == "spelling"))
+        stats.setdefault("grammar_errors", sum(1 for e in errors if e.get("type") in ("grammar", "grammar_discord")))
+        stats.setdefault("encoding_errors", sum(1 for e in errors if e.get("type") == "encoding_error"))
+
+        return {
+            "mode": "lan_proxy",
+            "ok": True,
+            "message": "LAN Proxy",
+            "error_found": len(errors) > 0,
+            "errors": errors,
+            "corrected_text": corrected,
+            "original": text,
+            "original_text": text,
+            "pre_fixed_count": result.get("pre_fixed_count", 0),
+            "summary_si": result.get("summary_si", ""),
+            "summary_en": result.get("summary_en", ""),
+            "stats": stats,
+        }
+
+    def send_corrections(self, corrections):
+        """Send human corrections to the proxy for central storage."""
+        try:
+            r = req_lib.post(
+                self.proxy_url + "/record_correction",
+                json={"corrections": corrections},
+                timeout=10,
+            )
+            return r.json()
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
+    # ----- helpers -------------------------------------------------------
+    @staticmethod
+    def _empty(text):
+        return {
+            "mode": "lan_proxy", "ok": True, "message": "LAN Proxy",
+            "error_found": False, "errors": [], "corrected_text": "",
+            "original": "", "original_text": "", "pre_fixed_count": 0,
+            "summary_si": "", "summary_en": "",
+            "stats": {"total_words": 0, "errors_found": 0, "spell_errors": 0,
+                      "grammar_errors": 0, "encoding_errors": 0},
+        }

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONUTF8=1 python tests/test_app.py)",
+      "Bash(PYTHONUTF8=1 python -c \"import customtkinter; print\\('customtkinter', customtkinter.__version__\\)\")",
+      "Bash(PYTHONUTF8=1 python -c \"import ast; ast.parse\\(open\\('sinhala_proofreader.py',encoding='utf-8'\\).read\\(\\)\\); print\\('GUI syntax OK'\\)\")",
+      "Bash(PYTHONUTF8=1 python -c ' *)",
+      "Bash(PYTHONUTF8=1 python tests/test_engine.py)",
+      "Bash(PYTHONUTF8=1 GRPC_VERBOSITY=NONE python tests/test_engine.py)",
+      "Bash(PYTHONUTF8=1 python -c \"import PyInstaller; print\\('PyInstaller', PyInstaller.__version__\\)\")",
+      "Bash(PYTHONUTF8=1 python -c \"import grpc, google.generativeai; print\\('grpc + genai import OK'\\)\")",
+      "Bash(PYTHONUTF8=1 pyinstaller build.spec --clean --noconfirm)",
+      "Bash(PYTHONUTF8=1 tail -30 \"C:\\\\Users\\\\Hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f--projects-proofreader\\\\15b9537b-f5ca-4e32-b028-a5646efa077d\\\\tasks\\\\b9mlni7k6.output\")",
+      "Bash(PYTHONUTF8=1 python -m PyInstaller build.spec --clean --noconfirm)",
+      "Bash(echo \"PyInstaller exit: $?\")",
+      "Bash(PYTHONUTF8=1 grep -rln \"sinmorph\\\\|SinMorphy\\\\|Spelling-Corrector\" --include=*.py --include=*.spec .)",
+      "Bash(PYTHONUTF8=1 python -c \"import main; from gui.main_window import MainWindow; from engine.proofreader import SinhalaProofreader; print\\('app imports OK'\\)\")"
+    ]
+  }
+}

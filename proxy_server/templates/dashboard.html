@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>📊 Dashboard</h1>
+
+{% if not model_ready %}
+  <div class="flash error">⚠️ Gemini model not ready: {{ model_error or 'no API key' }} —
+     set the API key below.</div>
+{% endif %}
+
+<div class="grid">
+  <div class="stat"><div class="n">{{ stats.total }}</div><div class="l">Corrections</div></div>
+  <div class="stat"><div class="n">{{ stats.precheck }}</div><div class="l">⚡ Precheck</div></div>
+  <div class="stat"><div class="n">{{ stats.inject }}</div><div class="l">Inject-only</div></div>
+  <div class="stat"><div class="n">{{ stats.confirmed }}</div><div class="l">Confirmed</div></div>
+  <div class="stat"><div class="n">{{ usage.total_requests }}</div><div class="l">Requests</div></div>
+  <div class="stat"><div class="n">{{ usage.total_words }}</div><div class="l">Words checked</div></div>
+</div>
+
+<div class="card">
+  <h2>🔑 Gemini API Key</h2>
+  <p class="muted">Key status: {% if has_key %}<b style="color:#4ade80">SET</b>{% else %}<b style="color:#f87171">MISSING</b>{% endif %}</p>
+  <form method="post" action="{{ url_for('admin.save_api_key') }}" class="row">
+    <input type="password" name="api_key" placeholder="AIza... / AQ..." style="flex:1;min-width:260px">
+    <button type="submit">Save Key</button>
+    <a class="btn btn-gray" style="padding:8px 14px;border-radius:8px;text-decoration:none"
+       href="{{ url_for('admin.test_api_key') }}">Test Key</a>
+  </form>
+</div>
+
+<div class="card">
+  <h2>⚙️ Server Settings</h2>
+  <form method="post" action="{{ url_for('admin.save_config') }}">
+    <div class="grid">
+      <label>Model
+        <input name="model" value="{{ cfg.model }}" style="width:100%"></label>
+      <label>Precheck threshold
+        <input name="precheck_threshold" type="number" value="{{ cfg.precheck_threshold }}" style="width:100%"></label>
+      <label>Inject top N
+        <input name="inject_top_n" type="number" value="{{ cfg.inject_top_n }}" style="width:100%"></label>
+      <label>Max concurrent
+        <input name="max_concurrent" type="number" value="{{ cfg.max_concurrent }}" style="width:100%"></label>
+      <label>Admin password (blank = keep)
+        <input name="admin_password" type="password" placeholder="new password" style="width:100%"></label>
+    </div>
+    <p><button type="submit">💾 Save Settings</button></p>
+  </form>
+  <p class="muted">Listening on port <b>{{ cfg.port }}</b> · transport <b>{{ cfg.api_transport }}</b></p>
+</div>
+
+<div class="card">
+  <h2>🔝 Top corrections</h2>
+  <table>
+    <tr><th>Wrong</th><th>Correct</th><th>Type</th><th>Count</th><th>Mode</th></tr>
+    {% for c in stats.top_errors %}
+    <tr><td>{{ c.wrong }}</td><td>{{ c.correct }}</td><td>{{ c.type }}</td>
+        <td>{{ c.count }}</td><td><span class="pill {{ c.mode }}">{{ c.mode }}</span></td></tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">No corrections yet.</td></tr>
+    {% endfor %}
+  </table>
+  <p><a class="tab" href="{{ url_for('admin.corrections') }}">Manage all corrections →</a></p>
+</div>
+{% endblock %}

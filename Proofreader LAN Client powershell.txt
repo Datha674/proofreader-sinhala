@@ -1,0 +1,299 @@
+# Sinhala Proofreader LAN Client — Preflight Checks
+# Run in PowerShell as Administrator
+# Set $PROXY_IP to your Control PC's LAN IP before running
+
+# --- OS version & build ---
+(Get-CimInstance Win32_OperatingSystem).Caption + " Build " + (Get-CimInstance Win32_OperatingSystem).BuildNumber
+
+# --- PowerShell version ---
+$PSVersionTable.PSVersion
+
+# --- Running as admin? ---
+([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+# --- All active NICs & IPs ---
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.IPAddress -ne "127.0.0.1"} | Select-Object InterfaceAlias, IPAddress, PrefixLength | Format-Table -AutoSize
+
+# --- Default gateway ---
+Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Select-Object InterfaceAlias, NextHop | Format-Table -AutoSize
+
+# --- NIC link speed & status ---
+Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object Name, Status, LinkSpeed | Format-Table -AutoSize
+
+# --- DNS servers ---
+Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object {$_.ServerAddresses} | Format-Table -AutoSize
+
+# --- Ping Control PC (replace IP) ---
+$PROXY_IP = "192.168.1.100"   # ← set your Control PC IP here
+Test-Connection -ComputerName $PROXY_IP -Count 4 | Select-Object Address, Latency, Status
+
+# --- TCP port 8765 open? ---
+$PROXY_IP = "192.168.1.100"
+Test-NetConnection -ComputerName $PROXY_IP -Port 8765 | Select-Object ComputerName, RemotePort, TcpTestSucceeded
+
+# --- HTTP health check (proxy /ping) ---
+$PROXY_IP = "192.168.1.100"
+try {
+  $r = Invoke-WebRequest -Uri "http://${PROXY_IP}:8765/ping" -TimeoutSec 5 -UseBasicParsing
+  "STATUS: $($r.StatusCode)  BODY: $($r.Content)"
+} catch { "FAILED: $_" }
+
+# --- Trace route to Control PC ---
+$PROXY_IP = "192.168.1.100"
+Test-NetConnection -ComputerName $PROXY_IP -TraceRoute | Select-Object -ExpandProperty TraceRoute
+
+# --- Gemini API must NOT be reachable ---
+Test-NetConnection -ComputerName "generativelanguage.googleapis.com" -Port 443 | Select-Object ComputerName, TcpTestSucceeded
+# Expected: TcpTestSucceeded = False (blocked by Sophos/no internet)
+
+# --- No general internet access ---
+Test-NetConnection -ComputerName "8.8.8.8" -Port 53 | Select-Object RemoteAddress, TcpTestSucceeded
+# Expected: TcpTestSucceeded = False
+
+# --- Firewall profiles active? ---
+Get-NetFirewallProfile | Select-Object Name, Enabled | Format-Table -AutoSize
+
+# --- Any rule blocking port 8765 outbound? ---
+Get-NetFirewallRule -Direction Outbound -Enabled True | 
+  Get-NetFirewallPortFilter | 
+  Where-Object {$_.RemotePort -eq "8765"} | 
+  Select-Object @{N="Rule";E={$_.InstanceID}}, Protocol, RemotePort
+
+# --- Sophos process running? ---
+Get-Process | Where-Object {$_.Name -like "*sophos*" -or $_.Name -like "*savservice*"} | Select-Object Name, Id, CPU | Format-Table -AutoSize
+
+# --- VC++ Redistributables installed ---
+Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*, `
+  HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
+  Where-Object {$_.DisplayName -like "*Visual C++*"} |
+  Select-Object DisplayName, DisplayVersion | Sort-Object DisplayName | Format-Table -AutoSize
+
+# --- Free disk space on C:\ ---
+Get-PSDrive C | Select-Object @{N="FreeGB";E={[math]::Round($_.Free/1GB,2)}}, @{N="UsedGB";E={[math]::Round($_.Used/1GB,2)}}
+
+# --- RAM available ---
+$cs = Get-CimInstance Win32_ComputerSystem
+[PSCustomObject]@{
+  TotalRAM_GB = [math]::Round($cs.TotalPhysicalMemory/1GB,2)
+  FreeRAM_GB  = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,2)
+}
+
+# --- Exe already in path? (check) ---
+Test-Path "C:\SinhalaProofreader\SinhalaProofreader.exe"
+# Change path to wherever you'll deploy the exe
+
+__________________________------------------_________________
+__________________________------------------_________________
+__________________________------------------_________________
+__________________________------------------_________________
+
+
+# Sinhala Proofreader LAN — Network Deep Scan
+# Set $PROXY_IP to your Control PC IP throughout
+# Run in PowerShell as Administrator
+
+# --- Hostname & domain ---
+[PSCustomObject]@{
+  Hostname   = $env:COMPUTERNAME
+  Domain     = (Get-CimInstance Win32_ComputerSystem).Domain
+  Workgroup  = (Get-CimInstance Win32_ComputerSystem).Workgroup
+  LoggedUser = $env:USERNAME
+} | Format-List
+
+# --- Full OS info ---
+Get-CimInstance Win32_OperatingSystem |
+  Select-Object Caption, BuildNumber, OSArchitecture,
+    @{N="InstallDate";E={$_.InstallDate.ToString("yyyy-MM-dd")}},
+    @{N="LastBoot";E={$_.LastBootUpTime.ToString("yyyy-MM-dd HH:mm")}} |
+  Format-List
+
+# --- MAC addresses ---
+Get-NetAdapter | Select-Object Name, MacAddress, Status, InterfaceDescription | Format-Table -AutoSize
+
+# --- All IPv4 + subnet ---
+Get-NetIPAddress -AddressFamily IPv4 |
+  Select-Object InterfaceAlias, IPAddress, PrefixLength,
+    @{N="Subnet";E={
+      $mask = ([Math]::Pow(2,32) - [Math]::Pow(2,(32-$_.PrefixLength)))
+      $ip   = [System.Net.IPAddress]::Parse($_.IPAddress).GetAddressBytes()
+      $m    = [BitConverter]::GetBytes([uint32]$mask)
+      if([BitConverter]::IsLittleEndian){[Array]::Reverse($m)}
+      "$($ip[0]-band$m[0]).$($ip[1]-band$m[1]).$($ip[2]-band$m[2]).$($ip[3]-band$m[3])/$($_.PrefixLength)"
+    }},
+    AddressState, PrefixOrigin, SuffixOrigin |
+  Sort-Object InterfaceAlias | Format-Table -AutoSize
+
+# --- All IPv6 ---
+Get-NetIPAddress -AddressFamily IPv6 |
+  Select-Object InterfaceAlias, IPAddress, PrefixLength, AddressState |
+  Sort-Object InterfaceAlias | Format-Table -AutoSize
+
+# --- All gateways ---
+Get-NetRoute -DestinationPrefix "0.0.0.0/0","::0/0" -ErrorAction SilentlyContinue |
+  Select-Object InterfaceAlias, DestinationPrefix, NextHop, RouteMetric |
+  Sort-Object RouteMetric | Format-Table -AutoSize
+
+# --- Full routing table ---
+Get-NetRoute -AddressFamily IPv4 |
+  Select-Object InterfaceAlias, DestinationPrefix, NextHop, RouteMetric, Protocol |
+  Sort-Object RouteMetric | Format-Table -AutoSize
+
+# --- DHCP server & lease ---
+Get-NetIPConfiguration | ForEach-Object {
+  [PSCustomObject]@{
+    Interface   = $_.InterfaceAlias
+    IPv4Address = $_.IPv4Address.IPAddress
+    Gateway     = $_.IPv4DefaultGateway.NextHop
+    DHCPServer  = $_.DhcpServer
+    DNS         = ($_.DNSServer.ServerAddresses -join ", ")
+  }
+} | Format-Table -AutoSize
+
+# --- DHCP lease expiry ---
+Get-CimInstance Win32_NetworkAdapterConfiguration |
+  Where-Object {$_.DHCPEnabled -and $_.IPAddress} |
+  Select-Object Description, IPAddress, DHCPServer,
+    @{N="LeaseObtained";E={$_.DHCPLeaseObtained}},
+    @{N="LeaseExpires";E={$_.DHCPLeaseExpires}} |
+  Format-List
+
+# --- Force DHCP renew ---
+ipconfig /release
+Start-Sleep -Seconds 2
+ipconfig /renew
+ipconfig /all | Select-String -Pattern "IPv4|Gateway|DHCP|DNS"
+
+# --- All adapters ---
+Get-NetAdapter | Select-Object Name, InterfaceDescription, Status,
+  @{N="Speed";E={if($_.LinkSpeed){"$([math]::Round($_.LinkSpeed/1MB)) Mbps"}else{"N/A"}}},
+  MacAddress, Virtual | Sort-Object Status | Format-Table -AutoSize
+
+# --- NIC statistics ---
+Get-NetAdapterStatistics | Select-Object Name,
+  @{N="Sent_MB";E={[math]::Round($_.SentBytes/1MB,2)}},
+  @{N="Recv_MB";E={[math]::Round($_.ReceivedBytes/1MB,2)}},
+  OutboundDiscardedPackets, InboundDiscardedPackets,
+  OutboundPacketErrors, InboundPacketErrors | Format-Table -AutoSize
+
+# --- NIC driver info ---
+Get-NetAdapter | ForEach-Object {
+  $d = Get-NetAdapterAdvancedProperty -Name $_.Name -ErrorAction SilentlyContinue |
+       Where-Object {$_.DisplayName -eq "Speed & Duplex"}
+  [PSCustomObject]@{
+    Name        = $_.Name
+    Driver      = $_.DriverVersion
+    DriverDate  = $_.DriverDate
+    SpeedDuplex = $d.DisplayValue
+    IfIndex     = $_.ifIndex
+  }
+} | Format-Table -AutoSize
+
+# --- Binding order / metric ---
+Get-NetIPInterface -AddressFamily IPv4 |
+  Sort-Object InterfaceMetric |
+  Select-Object InterfaceAlias, InterfaceMetric, Dhcp, ConnectionState | Format-Table -AutoSize
+
+# --- DNS servers ---
+Get-DnsClientServerAddress |
+  Where-Object {$_.ServerAddresses} |
+  Select-Object InterfaceAlias, AddressFamily,
+    @{N="DNS_Servers";E={$_.ServerAddresses -join " | "}} |
+  Format-Table -AutoSize
+
+# --- Resolve Control PC ---
+$CONTROL_PC_NAME = "CONTROL-PC"   # ← set actual hostname
+Resolve-DnsName -Name $CONTROL_PC_NAME -ErrorAction SilentlyContinue |
+  Select-Object Name, QueryType, IPAddress, NameHost
+
+# --- DNS cache ---
+Get-DnsClientCache | Select-Object Entry, Name, Data, TimeToLive, Type | Format-Table -AutoSize
+
+# --- Flush DNS ---
+Clear-DnsClientCache
+Write-Host "DNS cache cleared"
+ipconfig /flushdns
+
+# --- ARP cache ---
+Get-NetNeighbor -AddressFamily IPv4 |
+  Where-Object {$_.State -ne "Unreachable" -and $_.IPAddress -notlike "224.*" -and $_.IPAddress -ne "255.255.255.255"} |
+  Select-Object InterfaceAlias, IPAddress, LinkLayerAddress, State |
+  Sort-Object IPAddress | Format-Table -AutoSize
+
+# --- Control PC in ARP ---
+$PROXY_IP = "192.168.1.100"
+$entry = Get-NetNeighbor -IPAddress $PROXY_IP -ErrorAction SilentlyContinue
+if($entry){ "FOUND: $($entry.IPAddress) → MAC $($entry.LinkLayerAddress) [$($entry.State)]" }
+else { "NOT IN ARP — ping it first: Test-Connection $PROXY_IP -Count 2" }
+
+# --- Subnet sweep ---
+$subnet = "192.168.1"   # ← set your subnet
+1..254 | ForEach-Object -ThrottleLimit 50 -Parallel {
+  $ip = "$using:subnet.$_"
+  if(Test-Connection -ComputerName $ip -Count 1 -TimeoutSeconds 1 -Quiet){
+    $mac = (Get-NetNeighbor -IPAddress $ip -ErrorAction SilentlyContinue).LinkLayerAddress
+    [PSCustomObject]@{IP=$ip; MAC=$mac; Status="UP"}
+  }
+} | Sort-Object {[version]$_.IP} | Format-Table -AutoSize
+
+# --- NetBIOS hostnames ---
+Get-NetNeighbor -AddressFamily IPv4 |
+  Where-Object {$_.State -eq "Reachable"} |
+  ForEach-Object {
+    $name = try{[System.Net.Dns]::GetHostEntry($_.IPAddress).HostName}catch{"unknown"}
+    [PSCustomObject]@{IP=$_.IPAddress; MAC=$_.LinkLayerAddress; Hostname=$name}
+  } | Sort-Object IP | Format-Table -AutoSize
+
+# --- Active TCP connections ---
+Get-NetTCPConnection -State Established,TimeWait,CloseWait |
+  Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State,
+    @{N="Process";E={(Get-Process -Id $_.OwningProcess -EA SilentlyContinue).Name}} |
+  Sort-Object RemoteAddress | Format-Table -AutoSize
+
+# --- Listening ports ---
+Get-NetTCPConnection -State Listen |
+  Select-Object LocalAddress, LocalPort,
+    @{N="Process";E={(Get-Process -Id $_.OwningProcess -EA SilentlyContinue).Name}} |
+  Sort-Object LocalPort | Format-Table -AutoSize
+
+# --- Connections to proxy 8765 ---
+$PROXY_IP = "192.168.1.100"
+Get-NetTCPConnection |
+  Where-Object {$_.RemoteAddress -eq $PROXY_IP -and $_.RemotePort -eq 8765} |
+  Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State,
+    @{N="Process";E={(Get-Process -Id $_.OwningProcess -EA SilentlyContinue).Name}} |
+  Format-Table -AutoSize
+
+# --- Full report export ---
+$out = "$env:USERPROFILE\Desktop\NetReport_$env:COMPUTERNAME.txt"
+$PROXY_IP = "192.168.1.100"   # ← set Control PC IP
+
+@"
+=== NET REPORT: $env:COMPUTERNAME  $(Get-Date) ===
+
+--- IDENTITY ---
+"@ | Out-File $out
+(Get-CimInstance Win32_ComputerSystem | Select-Object Name, Domain, Workgroup) | Out-File $out -Append
+
+"`n--- IPv4 ADDRESSES ---" | Out-File $out -Append
+Get-NetIPAddress -AddressFamily IPv4 | Select-Object InterfaceAlias,IPAddress,PrefixLength,PrefixOrigin | Format-Table -AutoSize | Out-File $out -Append
+
+"`n--- GATEWAYS ---" | Out-File $out -Append
+Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Select-Object InterfaceAlias,NextHop,RouteMetric | Out-File $out -Append
+
+"`n--- DHCP + DNS ---" | Out-File $out -Append
+Get-NetIPConfiguration | ForEach-Object {
+  "Interface: $($_.InterfaceAlias)  IP: $($_.IPv4Address.IPAddress)  GW: $($_.IPv4DefaultGateway.NextHop)  DHCP: $($_.DhcpServer)  DNS: $($_.DNSServer.ServerAddresses -join ',')"
+} | Out-File $out -Append
+
+"`n--- ARP NEIGHBOURS ---" | Out-File $out -Append
+Get-NetNeighbor -AddressFamily IPv4 | Where-Object {$_.State -ne "Unreachable"} |
+  Select-Object IPAddress,LinkLayerAddress,State | Sort-Object IPAddress | Format-Table -AutoSize | Out-File $out -Append
+
+"`n--- ADAPTERS ---" | Out-File $out -Append
+Get-NetAdapter | Select-Object Name,Status,LinkSpeed,MacAddress | Format-Table -AutoSize | Out-File $out -Append
+
+"`n--- PROXY PING (TCP 8765) ---" | Out-File $out -Append
+(Test-NetConnection -ComputerName $PROXY_IP -Port 8765 | Select-Object ComputerName,RemotePort,TcpTestSucceeded) | Out-File $out -Append
+
+Write-Host "Report saved: $out" -ForegroundColor Green
+Invoke-Item (Split-Path $out)

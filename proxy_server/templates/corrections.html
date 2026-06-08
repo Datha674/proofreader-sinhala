@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>✍️ Corrections ({{ stats.total }})</h1>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <form method="get" action="{{ url_for('admin.corrections') }}" class="row">
+      <input name="q" value="{{ q }}" placeholder="Search wrong/correct/type" style="min-width:240px">
+      <button type="submit">🔍 Search</button>
+      {% if q %}<a class="btn btn-gray" style="padding:8px 14px;border-radius:8px;text-decoration:none" href="{{ url_for('admin.corrections') }}">Clear</a>{% endif %}
+    </form>
+    <div class="row">
+      <a class="btn btn-gray" style="padding:8px 14px;border-radius:8px;text-decoration:none" href="{{ url_for('admin.export') }}">⬇ Export JSON</a>
+      <form method="post" action="{{ url_for('admin.import_corrections') }}" enctype="multipart/form-data" class="row">
+        <input type="file" name="file" accept=".json">
+        <button type="submit">⬆ Import</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>➕ Add correction</h2>
+  <form method="post" action="{{ url_for('admin.corrections_add') }}" class="row">
+    <input name="wrong" placeholder="wrong (වැරදි)" required>
+    <input name="correct" placeholder="correct (නිවැරදි)" required>
+    <select name="type">
+      <option value="spelling">spelling</option>
+      <option value="grammar">grammar</option>
+      <option value="grammar_discord">grammar_discord</option>
+      <option value="encoding_error">encoding_error</option>
+    </select>
+    <button type="submit" class="btn-green">Add</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Wrong</th><th>Correct</th><th>Type</th><th>Count</th><th>Conf</th>
+        <th>Mode</th><th>Confirmed</th><th>Actions</th></tr>
+    {% for c in items %}
+    <tr>
+      <td>{{ c.wrong }}</td><td>{{ c.correct }}</td><td>{{ c.type }}</td>
+      <td>{{ c.count }}</td><td>{{ '%.2f'|format(c.confidence) }}</td>
+      <td><span class="pill {{ c.mode }}">{{ c.mode }}</span></td>
+      <td>{{ '✅' if c.confirmed else '—' }}</td>
+      <td>
+        {% for act,label,cls in [('precheck','⚡ Precheck','btn-green'),
+                                 ('inject_only','Inject','btn-gray'),
+                                 ('disabled','Disable','btn-gray'),
+                                 ('confirm','Confirm','btn-gray'),
+                                 ('delete','🗑','btn-red')] %}
+        <form class="inline" method="post" action="{{ url_for('admin.corrections_action') }}">
+          <input type="hidden" name="id" value="{{ c.id }}">
+          <input type="hidden" name="action" value="{{ act }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button class="{{ cls }}" style="padding:4px 8px">{{ label }}</button>
+        </form>
+        {% endfor %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="muted">No corrections found.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
