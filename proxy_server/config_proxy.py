@@ -14,7 +14,7 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 CONFIG_PATH = os.path.join(BASE_DIR, "proxy_config.json")
 API_KEY_PATH = os.path.join(BASE_DIR, "api_key.txt")
 PROMPT_PATH = os.path.join(BASE_DIR, "sinhala_system_prompt.txt")
-CORRECTIONS_PATH = os.path.join(DATA_DIR, "corrections.json")
+CORRECTIONS_PATH = os.path.join(DATA_DIR, "corrections.db")
 LOG_PATH = os.path.join(DATA_DIR, "usage_log.csv")
 
 DEFAULT_CONFIG = {

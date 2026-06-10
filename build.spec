@@ -15,8 +15,14 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
-# Gemini-only app — no offline dictionary needed. Bundle the optional icon only.
+# Gemini-only app — no offline dictionary needed.
 datas = []
+
+# Bundle the app icon(s) so the running app can set its window/taskbar icon.
+for _icon in ("icon.ico", "icon.png"):
+    _p = os.path.join("assets", _icon)
+    if os.path.exists(_p):
+        datas += [(_p, "assets")]
 
 # CustomTkinter ships theme JSON / assets that must be included.
 datas += collect_data_files("customtkinter")
@@ -28,7 +34,10 @@ hiddenimports = ["customtkinter", "requests",
 hiddenimports += collect_submodules("google.generativeai")
 hiddenimports += collect_submodules("google.ai.generativelanguage")
 
-icon_file = os.path.join("assets", "icon.png")
+# Windows EXE icons must be .ico; fall back to .png only if no .ico is present.
+icon_file = os.path.join("assets", "icon.ico")
+if not os.path.exists(icon_file):
+    icon_file = os.path.join("assets", "icon.png")
 icon_arg = icon_file if os.path.exists(icon_file) else None
 
 # Heavy scientific / ML / dev libraries that may exist in the global Python

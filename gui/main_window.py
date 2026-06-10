@@ -8,6 +8,7 @@ window. Styled for both dark and light themes via gui/theme.py.
 """
 
 import os
+import sys
 import time
 import threading
 import datetime
@@ -33,6 +34,13 @@ APP_TITLE_EN = "Sinhala Proofreader"
 VERSION = "v" + _APP_VER
 
 
+def _resource_path(*parts):
+    """Resolve a bundled resource both in dev and inside a PyInstaller build."""
+    base = getattr(sys, "_MEIPASS", None) or os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, *parts)
+
+
 class MainWindow(ctk.CTk):
     def __init__(self, config):
         super().__init__()
@@ -51,6 +59,7 @@ class MainWindow(ctk.CTk):
         self.geometry("1300x840")
         self.minsize(1080, 720)
         self.configure(fg_color=TH.WINDOW_BG)
+        self._set_app_icon()
 
         self._build_header()
         self._build_mode_bar()
@@ -72,6 +81,24 @@ class MainWindow(ctk.CTk):
         if (self.config_obj.get("connection_mode", "direct") == "direct"
                 and not self.config_obj.has_api_key()):
             self.after(300, self._show_welcome)
+
+    def _set_app_icon(self):
+        """Set the window / taskbar icon from assets/. Uses the multi-size .ico
+        on Windows (crisp title bar + taskbar) and the .png elsewhere; the PNG is
+        also set as the inherited default so child Toplevels share the icon."""
+        ico = _resource_path("assets", "icon.ico")
+        png = _resource_path("assets", "icon.png")
+        try:
+            if os.path.exists(png):
+                self._icon_image = tk.PhotoImage(file=png)
+                self.iconphoto(True, self._icon_image)  # default for all windows
+        except Exception:
+            pass
+        try:
+            if os.name == "nt" and os.path.exists(ico):
+                self.iconbitmap(ico)
+        except Exception:
+            pass
 
     # ================================================================ build
     def _card(self, parent):

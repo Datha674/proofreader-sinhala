@@ -63,7 +63,7 @@ class MockEngine:
 
 def run():
     # ===== TEST 1 — Corrections DB dedup + count =====
-    tmp = os.path.join(tempfile.gettempdir(), "test_corrections.json")
+    tmp = os.path.join(tempfile.gettempdir(), "test_corrections.db")
     if os.path.exists(tmp):
         os.remove(tmp)
     db = CorrectionsDB(tmp)
@@ -121,7 +121,9 @@ def run():
     check("modern key accepted", Config.validate_api_key_format("AQ.Ab8RN6KiP_" + "x" * 12))
     check("short key rejected", not Config.validate_api_key_format("AQ.1"))
 
-    os.remove(tmp)
+    db.close()
+    if os.path.exists(tmp):
+        os.remove(tmp)
     print("\n%d passed, %d failed" % (_PASS, _FAIL))
     return _FAIL == 0
 

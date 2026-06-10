@@ -12,7 +12,6 @@ result the GUI shows.
 """
 
 import os
-import json
 import unicodedata
 
 from config import CONFIG_DIR
@@ -26,7 +25,7 @@ def _normalize(text):
 
 # Live corrections DB stored in a writable, persistent location (survives .exe
 # updates), NOT inside the read-only PyInstaller bundle.
-CORRECTIONS_PATH = os.path.join(CONFIG_DIR, "corrections.json")
+CORRECTIONS_PATH = os.path.join(CONFIG_DIR, "corrections.db")
 
 
 class SinhalaProofreader:
@@ -112,9 +111,9 @@ class SinhalaProofreader:
             proxy_url = self.engine.proxy_url
             r = requests.get(proxy_url + "/corrections", timeout=5)
             if r.status_code == 200:
-                with open(self.corrections_db.db_path, "w", encoding="utf-8") as f:
-                    json.dump(r.json(), f, ensure_ascii=False, indent=2)
-                self.corrections_db = CorrectionsDB(self.corrections_db.db_path)
+                # Mirror the proxy's authoritative store into our local SQLite
+                # DB (in place — no file surgery, no connection churn).
+                self.corrections_db.load_from_dict(r.json())
         except Exception as e:
             # Non-fatal: proxy may be offline; keep the local cache.
             print("Corrections sync skipped:", e)
